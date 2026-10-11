@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0e1116"><meta name="color-scheme" content="dark">
+<title>Carburant</title>
+<style>
+:root{--bg:#0e1116;--card:#171c24;--line:#242b36;--txt:#eef1f5;--mut:#8b95a5;--acc:#4ade80;--acc2:#1f3a2b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.wrap{max-width:560px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+h1{font-size:13px;font-weight:600;color:var(--mut);margin:0;text-transform:uppercase;letter-spacing:.08em}
+.place{font-size:22px;font-weight:700;margin:2px 0 0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.ico{width:42px;height:42px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:20px}
+.search{display:flex;gap:8px;margin-bottom:12px;position:relative}
+.search input{flex:1;min-width:0;background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:12px;padding:12px 14px;font:inherit}
+.search input::placeholder{color:var(--mut)}
+.loc{padding:0 14px;border-radius:12px;background:var(--card);border:1px solid var(--line)}
+.sug{position:absolute;top:50px;left:0;right:0;background:var(--card);border:1px solid var(--line);border-radius:12px;z-index:5;overflow:hidden}
+.sug button{display:block;width:100%;text-align:left;padding:12px 14px;border-bottom:1px solid var(--line)}
+.sug button:last-child{border:0}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;scrollbar-width:none}
+.chip{white-space:nowrap;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:14px}
+.chip.on{background:var(--acc2);border-color:var(--acc);color:var(--acc)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:16px}
+.seg button{padding:10px;border-radius:9px;color:var(--mut);font-weight:600}
+.seg button.on{background:var(--acc);color:#07140c}
+.st{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px;text-decoration:none;color:inherit}
+.st.best{border-color:var(--acc)}
+.nm{font-weight:600;overflow:hidden;text-overflow:ellipsis}
+.sub{color:var(--mut);font-size:13px;margin-top:2px}
+.pr{text-align:right;flex:none}
+.pr b{font-size:22px;font-variant-numeric:tabular-nums}
+.pr small{display:block;color:var(--mut);font-size:12px}
+.tag{display:inline-block;background:var(--acc2);color:var(--acc);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-bottom:4px}
+.st.out{opacity:.7;border-color:#5a2b2b}.tag.out{background:#3a1c1c;color:#ff8a80}.st.out .pr b{color:var(--mut)}.sw{display:flex;justify-content:space-between;align-items:center;margin-top:18px}.sw input{width:22px;height:22px;accent-color:var(--acc)}
+.msg{text-align:center;color:var(--mut);padding:40px 16px}
+.pan{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
+.pan.open{display:flex}
+.sheet{background:var(--card);width:100%;max-width:560px;margin:0 auto;border-radius:22px 22px 0 0;padding:22px 20px calc(24px + env(safe-area-inset-bottom))}
+.sheet h2{margin:0 0 16px;font-size:18px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.rv{font-size:32px;font-weight:700;color:var(--acc)}
+.done{width:100%;margin-top:20px;padding:14px;border-radius:12px;background:var(--acc);color:#07140c;font-weight:700}
+</style></head><body>
+<div class="wrap">
+<header><div><h1>Prix carburant</h1><div class="place" id="place">Localisation…</div></div>
+<button class="ico" id="gear" aria-label="Paramètres">⚙︎</button></header>
+<div class="search"><input id="q" placeholder="Autre ville (ex : Marseille)" autocomplete="off"><button class="loc" id="me" title="Ma position">◎</button><div class="sug" id="sug" hidden></div></div>
+<div class="chips" id="chips"></div>
+<div class="seg"><button data-s="dist" class="on">Plus proche</button><button data-s="price">Moins cher</button></div>
+<div id="list"></div>
+</div>
+<div class="pan" id="pan"><div class="sheet"><h2>Paramètres</h2>
+<div>Périmètre de recherche</div><div class="rv"><span id="rv">30</span> km</div>
+<input type="range" id="rg" min="5" max="50" step="5" value="30">
+<label class="sw"><span>Masquer les stations en rupture</span><input type="checkbox" id="hd"></label>
+<button class="done" id="done">Terminé</button></div></div>
+<script>
+const API='https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records';
+const FUELS=[['gazole','Gazole'],['e10','SP95-E10'],['sp98','SP98'],['sp95','SP95'],['e85','E85'],['gplc','GPLc']];
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let S={fuel:store.get('fuel','gazole'),sort:'dist',radius:store.get('radius',30),hide:store.get('hide',false),c:null,mine:true,rows:[]};
+let watchId=null,tok=0;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function km(a,b,c,d){const r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 12742*Math.asin(Math.sqrt(x))}
+function chips(){$('chips').innerHTML=FUELS.map(([k,n])=>`<button class="chip ${k==S.fuel?'on':''}" data-f="${k}">${n}</button>`).join('')}
+function render(){
+  const rows=S.rows.filter(r=>!(S.hide&&r.out));
+  rows.sort(S.sort=='dist'?(a,b)=>a.d-b.d:(a,b)=>(!!a.out-!!b.out)||(a.p??0)-(b.p??0)||a.d-b.d);
+  if(!rows.length){$('list').innerHTML='<div class="msg">Aucune station avec ce carburant dans ce périmètre.</div>';return}
+  const min=Math.min(...rows.filter(r=>!r.out&&r.p!=null).map(r=>r.p));
+  $('list').innerHTML=rows.slice(0,60).map(r=>{
+    const maj=r.m?new Date(r.m).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    return `<a class="st ${r.out?'out':r.p==min?'best':''}" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lon}">
+    <div style="min-width:0"><div class="nm">${esc(r.ville)}</div><div class="sub">${esc(r.adr)} · ${r.d.toFixed(1)} km</div></div>
+    <div class="pr">${r.out?`<span class="tag out">${r.out=='definitive'?'RUPTURE DÉFINITIVE':'RUPTURE'}</span>`:r.p==min?'<span class="tag">LE - CHER</span>':''}<b>${r.p!=null?r.p.toFixed(3)+' €':'—'}</b><small>${r.out&&r.since?'depuis le '+new Date(r.since).toLocaleDateString('fr-FR'):maj?'maj '+maj:''}</small></div></a>`}).join('')
+}
+function rupt(r,f){
+  const t=r[f+'_rupture_type'];if(t)return String(t).toLowerCase().startsWith('d')?'definitive':'temporaire';
+  const has=k=>String(r[k]||'').toLowerCase().split(/[;,|]/).map(x=>x.trim()).includes(f);
+  return has('carburants_rupture_definitive')?'definitive':has('carburants_rupture_temporaire')?'temporaire':''}
+async function load(){
+  if(!S.c)return; const my=++tok,{lat,lon}=S.c,f=S.fuel;
+  $('list').innerHTML='<div class="msg">Chargement des prix…</div>';
+  try{
+    let out=[];
+    for(let o=0;o<500;o+=100){
+      const where=`within_distance(geom, geom'POINT(${lon} ${lat})', ${S.radius}km)`;
+      const u=`${API}?where=${encodeURIComponent(where)}&limit=100&offset=${o}`;
+      const r=await fetch(u);if(!r.ok)throw 0;const j=await r.json();
+      out=out.concat(j.results||[]);if((j.results||[]).length<100)break}
+    if(my!=tok)return;
+    S.rows=out.filter(r=>r.geom).map(r=>({lat:r.geom.lat,lon:r.geom.lon,ville:r.ville,adr:r.adresse,p:r[f+'_prix'],m:r[f+'_maj'],d:km(lat,lon,r.geom.lat,r.geom.lon),out:rupt(r,f),since:r[f+'_rupture_debut']})).filter(r=>r.p!=null||r.out);
+    render()
+  }catch(e){if(my==tok)$('list').innerHTML='<div class="msg">Impossible de récupérer les prix. Vérifie ta connexion.</div>'}
+}
+function setCenter(c,mine){S.c=c;S.mine=mine;$('place').textContent=mine?'Autour de moi':c.label;load()}
+function locate(){
+  S.mine=true;$('place').textContent='Localisation…';
+  if(!navigator.geolocation){$('place').textContent='Position indisponible';return}
+  if(watchId!=null)navigator.geolocation.clearWatch(watchId);
+  watchId=navigator.geolocation.watchPosition(p=>{
+    const c={lat:p.coords.latitude,lon:p.coords.longitude};
+    if(!S.mine)return;
+    if(!S.c||km(S.c.lat,S.c.lon,c.lat,c.lon)>0.5)setCenter(c,true)
+  },()=>{if(S.mine&&!S.c)$('place').textContent='Position refusée — cherche une ville'},{enableHighAccuracy:true,maximumAge:30000,timeout:15000})
+}
+let qt;
+$('q').addEventListener('input',e=>{
+  clearTimeout(qt);const v=e.target.value.trim();
+  if(v.length<2){$('sug').hidden=true;return}
+  qt=setTimeout(async()=>{
+    try{const r=await fetch('https://geo.api.gouv.fr/communes?nom='+encodeURIComponent(v)+'&fields=nom,centre,codesPostaux,departement&boost=population&limit=5');
+    const j=await r.json();
+    $('sug').innerHTML=j.map((c,i)=>`<button data-i="${i}">${esc(c.nom)} <span class="sub">${esc(c.departement?.nom||'')}</span></button>`).join('');
+    $('sug').hidden=!j.length;$('sug')._d=j}catch(e){}
+  },250)});
+$('sug').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  const c=$('sug')._d[b.dataset.i];$('sug').hidden=true;$('q').value='';$('q').blur();
+  setCenter({lat:c.centre.coordinates[1],lon:c.centre.coordinates[0],label:c.nom},false)});
+$('me').onclick=()=>{S.c=null;locate()};
+$('chips').addEventListener('click',e=>{const b=e.target.closest('[data-f]');if(!b)return;S.fuel=b.dataset.f;store.set('fuel',S.fuel);chips();load()});
+document.querySelector('.seg').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;S.sort=b.dataset.s;document.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x==b));render()});
+$('gear').onclick=()=>{$('hd').checked=S.hide;$('rg').value=S.radius;$('rv').textContent=S.radius;$('pan').classList.add('open')};
+$('rg').oninput=e=>$('rv').textContent=e.target.value;
+$('done').onclick=()=>{const h=$('hd').checked;if(h!=S.hide){S.hide=h;store.set('hide',h);render()}const v=+$('rg').value;$('pan').classList.remove('open');if(v!=S.radius){S.radius=v;store.set('radius',v);load()}};
+$('pan').onclick=e=>{if(e.target==$('pan'))$('done').click()};
+chips();locate();
+</script></body></html>
