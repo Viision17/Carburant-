@@ -2,7 +2,7 @@
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0e1116"><meta name="color-scheme" content="dark">
-<title>Carburant</title>
+<title>Carburant</title><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Carburant"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
 :root{--bg:#0e1116;--card:#171c24;--line:#242b36;--txt:#eef1f5;--mut:#8b95a5;--acc:#4ade80;--acc2:#1f3a2b}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -35,6 +35,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .pr b{font-size:22px;font-variant-numeric:tabular-nums}
 .pr small{display:block;color:var(--mut);font-size:12px}
 .tag{display:inline-block;background:var(--acc2);color:var(--acc);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin-bottom:4px}
+.st.out{opacity:.7;border-color:#5a2b2b}.tag.out{background:#3a1c1c;color:#ff8a80}.st.out .pr b{color:var(--mut)}.sw{display:flex;justify-content:space-between;align-items:center;margin-top:18px}.sw input{width:22px;height:22px;accent-color:var(--acc)}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr;background:#12161d;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:6}.tabs button{padding:14px 0;color:var(--mut);font-weight:600;font-size:14px}.tabs button.on{color:var(--acc)}.wrap{padding-bottom:96px}
+.stk{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}.stk i{font-style:normal;font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:#5d6675}.stk i.ok{color:var(--acc);border-color:#2a5a3f}.stk i.out{color:#ff8a80;border-color:#6b2c2c}.leg{color:var(--mut);font-size:12px;margin:0 2px 10px}
+.x{color:var(--mut);font-size:20px;padding:4px 8px}
 .msg{text-align:center;color:var(--mut);padding:40px 16px}
 .pan{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
 .pan.open{display:flex}
@@ -44,53 +48,77 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .rv{font-size:32px;font-weight:700;color:var(--acc)}
 .done{width:100%;margin-top:20px;padding:14px;border-radius:12px;background:var(--acc);color:#07140c;font-weight:700}
 </style></head><body>
-<div class="wrap">
+<div class="wrap"><div id="v-home">
 <header><div><h1>Prix carburant</h1><div class="place" id="place">Localisation…</div></div>
 <button class="ico" id="gear" aria-label="Paramètres">⚙︎</button></header>
 <div class="search"><input id="q" placeholder="Autre ville (ex : Marseille)" autocomplete="off"><button class="loc" id="me" title="Ma position">◎</button><div class="sug" id="sug" hidden></div></div>
+<div class="chips" id="cc"></div>
 <div class="chips" id="chips"></div>
 <div class="seg"><button data-s="dist" class="on">Plus proche</button><button data-s="price">Moins cher</button></div>
-<div id="list"></div>
-</div>
+<div id="list"></div></div>
+<div id="v-cities" hidden><h1>Villes espagnoles</h1><div class="place" style="margin-bottom:12px">Ajouter des villes</div>
+<div class="search"><input id="q2" placeholder="Ex : Barcelona, Madrid, Valencia" autocomplete="off"><div class="sug" id="sug2" hidden></div></div>
+<div class="leg">Les villes ajoutées apparaissent sur l'écran Prix. Tu peux aussi les chercher directement depuis la barre de recherche.</div><div id="saved"></div></div></div>
+<nav class="tabs"><button data-t="home" class="on">⛽ Prix</button><button data-t="cities">🇪🇸 Villes espagnoles</button></nav>
 <div class="pan" id="pan"><div class="sheet"><h2>Paramètres</h2>
 <div>Périmètre de recherche</div><div class="rv"><span id="rv">30</span> km</div>
 <input type="range" id="rg" min="5" max="50" step="5" value="30">
+<label class="sw"><span>Masquer les stations en rupture</span><input type="checkbox" id="hd"></label>
 <button class="done" id="done">Terminé</button></div></div>
 <script>
 const API='https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records';
 const FUELS=[['gazole','Gazole'],['e10','SP95-E10'],['sp98','SP98'],['sp95','SP95'],['e85','E85'],['gplc','GPLc']];
+const ES={gazole:'Precio Gasoleo A',e10:'Precio Gasolina 95 E10',sp95:'Precio Gasolina 95 E5',sp98:'Precio Gasolina 98 E5',e85:'Precio Bioetanol',gplc:'Precio Gases licuados del petróleo'};
+const ESU='https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/';
+let esC=null;const num=v=>{const x=parseFloat(String(v||'').replace(',','.'));return isNaN(x)?null:x};
+const cap=t=>String(t||'').toLowerCase().replace(/(^|[\s\-\/(])\S/g,m=>m.toUpperCase());
 const $=id=>document.getElementById(id);
 const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
-let S={fuel:store.get('fuel','gazole'),sort:'dist',radius:store.get('radius',30),c:null,mine:true,rows:[]};
+let cities=[];try{cities=JSON.parse(localStorage.getItem('cities'))||[]}catch(e){}
+let S={es:false,fuel:store.get('fuel','gazole'),sort:'dist',radius:store.get('radius',30),hide:store.get('hide',false),c:null,mine:true,rows:[]};
 let watchId=null,tok=0;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function km(a,b,c,d){const r=Math.PI/180,x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2;return 12742*Math.asin(Math.sqrt(x))}
 function chips(){$('chips').innerHTML=FUELS.map(([k,n])=>`<button class="chip ${k==S.fuel?'on':''}" data-f="${k}">${n}</button>`).join('')}
 function render(){
-  const f=S.fuel,rows=S.rows.slice();
-  if(S.sort=='dist')rows.sort((a,b)=>a.d-b.d);else rows.sort((a,b)=>a.p-b.p||a.d-b.d);
+  const rows=S.rows.filter(r=>!(S.hide&&r.out));
+  rows.sort(S.sort=='dist'?(a,b)=>a.d-b.d:(a,b)=>(!!a.out-!!b.out)||(a.p??0)-(b.p??0)||a.d-b.d);
   if(!rows.length){$('list').innerHTML='<div class="msg">Aucune station avec ce carburant dans ce périmètre.</div>';return}
-  const min=Math.min(...rows.map(r=>r.p));
-  $('list').innerHTML=rows.slice(0,60).map(r=>{
+  const min=Math.min(...rows.filter(r=>!r.out&&r.p!=null).map(r=>r.p));
+  const leg=`<div class="leg">${S.es?'● proposé · ○ non proposé — stocks non publiés en Espagne':'● en stock · ✕ rupture · ○ non proposé'}</div>`;
+  $('list').innerHTML=leg+rows.slice(0,60).map(r=>{
     const maj=r.m?new Date(r.m).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
-    return `<a class="st ${r.p==min?'best':''}" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lon}">
-    <div style="min-width:0"><div class="nm">${esc(r.ville)}</div><div class="sub">${esc(r.adr)} · ${r.d.toFixed(1)} km</div></div>
-    <div class="pr">${r.p==min?'<span class="tag">LE - CHER</span>':''}<b>${r.p.toFixed(3)} €</b><small>${maj?'maj '+maj:''}</small></div></a>`}).join('')
+    return `<a class="st ${r.out?'out':r.p==min?'best':''}" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${r.lat},${r.lon}">
+    <div style="min-width:0"><div class="nm">${esc(r.ville)}</div><div class="sub">${esc(r.adr)} · ${r.d.toFixed(1)} km</div><div class="stk">${FUELS.map(([k,n])=>`<i class="${r.st[k]}">${{ok:'●',out:'✕',no:'○'}[r.st[k]]} ${n}</i>`).join('')}</div></div>
+    <div class="pr">${r.out?`<span class="tag out">${r.out=='definitive'?'RUPTURE DÉFINITIVE':'RUPTURE'}</span>`:r.p==min?'<span class="tag">LE - CHER</span>':''}<b>${r.p!=null?r.p.toFixed(3)+' €':'—'}</b><small>${r.out&&r.since?'depuis le '+new Date(r.since).toLocaleDateString('fr-FR'):maj?'maj '+maj:''}</small></div></a>`}).join('')
 }
+function rupt(r,f){
+  const t=r[f+'_rupture_type'];if(t)return String(t).toLowerCase().startsWith('d')?'definitive':'temporaire';
+  const has=k=>String(r[k]||'').toLowerCase().split(/[;,|]/).map(x=>x.trim()).includes(f);
+  return has('carburants_rupture_definitive')?'definitive':has('carburants_rupture_temporaire')?'temporaire':''}
+async function loadES(my,lat,lon,f){
+  if(!esC||Date.now()-esC.t>6e5){const r=await fetch(ESU);esC={t:Date.now(),d:(await r.json()).ListaEESSPrecio||[]}}
+  if(my!=tok)return;
+  S.es=true;S.rows=esC.d.map(s=>{const la=num(s['Latitud']),lo=num(s['Longitud (WGS84)']);if(la==null||lo==null)return 0;const d=km(lat,lon,la,lo);if(d>S.radius)return 0;
+    const st={};FUELS.forEach(([k])=>st[k]=num(s[ES[k]])!=null?'ok':'no');
+    return{lat:la,lon:lo,ville:(s['Rótulo']?cap(s['Rótulo'])+' · ':'')+cap(s['Localidad']),adr:cap(s['Dirección']),p:num(s[ES[f]]),d,out:'',st}}).filter(r=>r&&r.p!=null);
+  render()}
 async function load(){
   if(!S.c)return; const my=++tok,{lat,lon}=S.c,f=S.fuel;
   $('list').innerHTML='<div class="msg">Chargement des prix…</div>';
   try{
+    if(S.c.country=='ES'){await loadES(my,lat,lon,f);return}
     let out=[];
-    for(let o=0;o<300;o+=100){
-      const where=`within_distance(geom, geom'POINT(${lon} ${lat})', ${S.radius}km) and ${f}_prix is not null`;
+    for(let o=0;o<500;o+=100){
+      const where=`within_distance(geom, geom'POINT(${lon} ${lat})', ${S.radius}km)`;
       const u=`${API}?where=${encodeURIComponent(where)}&limit=100&offset=${o}`;
       const r=await fetch(u);if(!r.ok)throw 0;const j=await r.json();
       out=out.concat(j.results||[]);if((j.results||[]).length<100)break}
     if(my!=tok)return;
-    S.rows=out.filter(r=>r.geom).map(r=>({lat:r.geom.lat,lon:r.geom.lon,ville:r.ville,adr:r.adresse,p:r[f+'_prix'],m:r[f+'_maj'],d:km(lat,lon,r.geom.lat,r.geom.lon)}));
+    if(!out.length&&S.mine&&lat<44&&lon<3.5&&lon>-9.6){await loadES(my,lat,lon,f);return}
+    S.es=false;S.rows=out.filter(r=>r.geom).map(r=>({lat:r.geom.lat,lon:r.geom.lon,ville:r.ville,adr:r.adresse,p:r[f+'_prix'],m:r[f+'_maj'],d:km(lat,lon,r.geom.lat,r.geom.lon),out:rupt(r,f),since:r[f+'_rupture_debut'],st:Object.fromEntries(FUELS.map(([k])=>[k,rupt(r,k)?'out':r[k+'_prix']!=null?'ok':'no']))})).filter(r=>r.p!=null||r.out);
     render()
-  }catch(e){if(my==tok)$('list').innerHTML='<div class="msg">Impossible de récupérer les prix. Vérifie ta connexion.</div>'}
+  }catch(e){if(my==tok)$('list').innerHTML='<div class="msg">Impossible de récupérer les prix'+(S.c.country=='ES'?' espagnols':'')+'. Vérifie ta connexion.</div>'}
 }
 function setCenter(c,mine){S.c=c;S.mine=mine;$('place').textContent=mine?'Autour de moi':c.label;load()}
 function locate(){
@@ -103,26 +131,32 @@ function locate(){
     if(!S.c||km(S.c.lat,S.c.lon,c.lat,c.lon)>0.5)setCenter(c,true)
   },()=>{if(S.mine&&!S.c)$('place').textContent='Position refusée — cherche une ville'},{enableHighAccuracy:true,maximumAge:30000,timeout:15000})
 }
-let qt;
-$('q').addEventListener('input',e=>{
-  clearTimeout(qt);const v=e.target.value.trim();
-  if(v.length<2){$('sug').hidden=true;return}
-  qt=setTimeout(async()=>{
-    try{const r=await fetch('https://geo.api.gouv.fr/communes?nom='+encodeURIComponent(v)+'&fields=nom,centre,codesPostaux,departement&boost=population&limit=5');
-    const j=await r.json();
-    $('sug').innerHTML=j.map((c,i)=>`<button data-i="${i}">${esc(c.nom)} <span class="sub">${esc(c.departement?.nom||'')}</span></button>`).join('');
-    $('sug').hidden=!j.length;$('sug')._d=j}catch(e){}
-  },250)});
-$('sug').addEventListener('click',e=>{
-  const b=e.target.closest('button');if(!b)return;
-  const c=$('sug')._d[b.dataset.i];$('sug').hidden=true;$('q').value='';$('q').blur();
-  setCenter({lat:c.centre.coordinates[1],lon:c.centre.coordinates[0],label:c.nom},false)});
+async function find(v,only){
+  const fr=only=='ES'?[]:fetch('https://geo.api.gouv.fr/communes?nom='+encodeURIComponent(v)+'&fields=nom,centre,departement&boost=population&limit=4').then(r=>r.json()).then(j=>j.map(c=>({n:c.nom,s:c.departement?.nom||'France',lat:c.centre.coordinates[1],lon:c.centre.coordinates[0],cc:'FR'}))).catch(()=>[]);
+  const es=fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(v)+'&count=5&language=fr&countryCode=ES').then(r=>r.json()).then(j=>(j.results||[]).map(c=>({n:c.name,s:c.admin1||'Espagne',lat:c.latitude,lon:c.longitude,cc:'ES'}))).catch(()=>[]);
+  return(await Promise.all([fr,es])).flat()}
+const fl=c=>c=='ES'?'🇪🇸':'🇫🇷';
+function sugBox(inp,box,only,pick){let t;
+  inp.addEventListener('input',()=>{clearTimeout(t);const v=inp.value.trim();if(v.length<2){box.hidden=true;return}
+    t=setTimeout(async()=>{const j=await find(v,only);box._d=j;box.innerHTML=j.map((c,i)=>`<button data-i="${i}">${fl(c.cc)} ${esc(c.n)} <span class="sub">${esc(c.s)}</span></button>`).join('');box.hidden=!j.length},250)});
+  box.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const c=box._d[b.dataset.i];box.hidden=true;inp.value='';inp.blur();pick(c)})}
+const go=c=>{tab('home');setCenter({lat:c.lat,lon:c.lon,label:c.n,country:c.cc},false)};
+function drawCities(){
+  $('cc').innerHTML=cities.map((c,i)=>`<button class="chip" data-c="${i}">${fl(c.cc)} ${esc(c.n)}</button>`).join('');$('cc').hidden=!cities.length;
+  $('saved').innerHTML=cities.length?cities.map((c,i)=>`<div class="st" data-c="${i}"><div class="nm">${fl(c.cc)} ${esc(c.n)} <span class="sub">${esc(c.s)}</span></div><button class="x" data-x="${i}" aria-label="Retirer">✕</button></div>`).join(''):'<div class="msg">Aucune ville enregistrée.</div>'}
+function saveCities(){store.set('cities',cities);drawCities()}
+function tab(t){$('v-home').hidden=t!='home';$('v-cities').hidden=t!='cities';document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t==t))}
+sugBox($('q'),$('sug'),0,go);
+sugBox($('q2'),$('sug2'),'ES',c=>{if(!cities.some(x=>x.n==c.n&&x.s==c.s))cities.push(c);saveCities()});
+document.querySelector('.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)tab(b.dataset.t)});
+$('cc').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(b)go(cities[b.dataset.c])});
+$('saved').addEventListener('click',e=>{const x=e.target.closest('[data-x]');if(x){cities.splice(+x.dataset.x,1);saveCities();return}const r=e.target.closest('[data-c]');if(r)go(cities[r.dataset.c])});
 $('me').onclick=()=>{S.c=null;locate()};
 $('chips').addEventListener('click',e=>{const b=e.target.closest('[data-f]');if(!b)return;S.fuel=b.dataset.f;store.set('fuel',S.fuel);chips();load()});
 document.querySelector('.seg').addEventListener('click',e=>{const b=e.target.closest('[data-s]');if(!b)return;S.sort=b.dataset.s;document.querySelectorAll('.seg button').forEach(x=>x.classList.toggle('on',x==b));render()});
-$('gear').onclick=()=>{$('rg').value=S.radius;$('rv').textContent=S.radius;$('pan').classList.add('open')};
+$('gear').onclick=()=>{$('hd').checked=S.hide;$('rg').value=S.radius;$('rv').textContent=S.radius;$('pan').classList.add('open')};
 $('rg').oninput=e=>$('rv').textContent=e.target.value;
-$('done').onclick=()=>{const v=+$('rg').value;$('pan').classList.remove('open');if(v!=S.radius){S.radius=v;store.set('radius',v);load()}};
+$('done').onclick=()=>{const h=$('hd').checked;if(h!=S.hide){S.hide=h;store.set('hide',h);render()}const v=+$('rg').value;$('pan').classList.remove('open');if(v!=S.radius){S.radius=v;store.set('radius',v);load()}};
 $('pan').onclick=e=>{if(e.target==$('pan'))$('done').click()};
-chips();locate();
+chips();drawCities();locate();if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script></body></html>
